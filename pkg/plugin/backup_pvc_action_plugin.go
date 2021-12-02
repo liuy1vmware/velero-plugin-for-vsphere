@@ -3,6 +3,8 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	backupdriverv1 "github.com/vmware-tanzu/velero-plugin-for-vsphere/pkg/apis/backupdriver/v1alpha1"
@@ -20,7 +22,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
-	"os"
 )
 
 // PVCBackupItemAction is a backup item action plugin for Velero.
@@ -98,13 +99,10 @@ func (p *NewPVCBackupItemAction) Execute(item runtime.Unstructured, backup *vele
 	if err != nil {
 		return nil, nil, errors.WithStack(err)
 	}
-	if pv.Spec.PersistentVolumeSource.CSI == nil {
-		p.Log.Infof("Skipping PVC %s/%s, associated PV %s is not a CSI volume", pvc.Namespace, pvc.Name, pv.Name)
-		return item, nil, nil
-	}
-
-	if pv.Spec.PersistentVolumeSource.CSI.Driver != constants.VSphereCSIDriverName {
-		p.Log.Infof("Skipping PVC %s/%s, associated PV %s is not a vSphere CSI volume", pvc.Namespace, pvc.Name, pv.Name)
+	isVsphereVolume := pv.Spec.PersistentVolumeSource.CSI != nil && pv.Spec.PersistentVolumeSource.CSI.Driver == constants.VSphereCSIDriverName
+	isMigratedVolume := pluginUtil.IsMigratedCSIVolume(pv)
+	if !isVsphereVolume && !isMigratedVolume {
+		p.Log.Infof("Skipping PVC %s/%s, is %s vsphere volume? %t; is %s migrated volume? %t", pvc.Namespace, pvc.Name, pvc.Name, isVsphereVolume, pvc.Name, isMigratedVolume)
 		return item, nil, nil
 	}
 
